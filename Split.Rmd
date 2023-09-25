@@ -1,0 +1,1044 @@
+---
+title: "Single_Cells_HR"
+author: "Chaoting Zhou"
+date: "7/10/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::knit_hooks$set(optipng = knitr::hook_optipng)
+```
+
+```{r}
+setwd("/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/data_analysis")
+```
+
+
+
+```{r}
+library(Seurat)
+library(tidyverse)
+library(Matrix)
+library(scales)
+library(cowplot)
+library(RCurl)
+library(DropletUtils)
+```
+
+```{r}
+ data_dirs <- c("/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0428/032323")
+ # Read the RNA and HTO data
+  counts <- Read10X(data_dirs)
+  hto_seurat <- as.data.frame(counts$`Hashtag`)
+  rownames( hto_seurat)
+  hto_seurat <- hto_seurat[-c(1:5),]
+  rownames( hto_seurat)
+
+  # Create the Seurat objects
+  rna_seurat <- CreateSeuratObject(counts = counts$`Gene Expression`, project = "RNA",min.cells = 3,    min.features = 200)
+  adt_seurat <- CreateSeuratObject(counts = counts$`Antibody Capture`, project = "ADT")
+
+  # Determine common cell barcodes
+common_cells <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(adt_seurat)))
+  length(common_cells)
+  rna_seurat <- rna_seurat[,common_cells]
+  adt_seurat <- adt_seurat[,common_cells]
+  hto_seurat <- hto_seurat[,common_cells]
+  # Subset Seurat objects and HTO data to common cell barcaroles
+  rna_seurat[["HTO"]] <- CreateAssayObject(counts = hto_seurat)
+  adt_seurat[["HTO"]] <- CreateAssayObject(counts = hto_seurat)
+  head(rna_seurat)
+  
+  rna_seurat <- NormalizeData(rna_seurat)
+  rna_seurat <- FindVariableFeatures(rna_seurat, selection.method = "vst")
+  rna_seurat <- ScaleData(rna_seurat, features = VariableFeatures(rna_seurat)) 
+
+  rna_seurat_1 <- NormalizeData(rna_seurat, 
+                             assay = "HTO", 
+                             normalization.method = "CLR")
+
+  rna_seurat_1 <- HTODemux(rna_seurat_1,
+                        assay = "HTO", 
+                        positive.quantile = 0.99)
+
+  table(rna_seurat$nFeature_HTO)
+  sample <- table(rna_seurat$hash.ID)
+
+
+
+
+```{r cars}
+summary(cars)
+```
+
+```{r}
+data0323.dir <- "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0428/032323"
+rna_counts <- Read10X(data0323.dir)
+rna_seurat <- CreateSeuratObject(counts = rna_counts$`Gene Expression`, project = "RNA",min.cells = 3, min.features = 200)
+head(rna_seurat)
+rna_seurat <- FindVariableFeatures(rna_seurat, selection.method = "vst")
+all.genes <- rownames(rna_seurat)
+rna_seurat <- ScaleData(rna_seurat, features = all.genes)
+rna_seurat
+
+```
+
+
+```{r}
+hot_counts <- Read10X(data0323.dir)
+pbmc.htos <- as.data.frame(hot_counts$`Hashtag`)
+rownames(pbmc.htos)
+pbmc.htos <- pbmc.htos[-c(1:5),]
+rownames(pbmc.htos)
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(pbmc.htos),colnames(adt_seurat)))
+length(commonDrops)
+rna_seurat <- CreateSeuratObject(counts = rna_counts$`Gene Expression`, project = "RNA",min.cells = 3, min.features = 200)
+rna_seurat[["HTO"]] <- CreateAssayObject(counts = pbmc.htos[,commonDrops])
+rna_seurat
+head(rna_seurat)
+```
+```{r}
+pbmc.hashtag <- NormalizeData(rna_seurat)
+#寻找高可变
+pbmc.hashtag <- FindVariableFeatures(pbmc.hashtag, selection.method = "mean.var.plot")
+#标准化
+pbmc.hashtag <- ScaleData(pbmc.hashtag, features = VariableFeatures(pbmc.hashtag))
+pbmc.hashtag
+```
+
+```{r}
+pbmc.htos <- pbmc.htos[,commonDrops]
+pbmc.hashtag[["HTO"]] <- CreateAssayObject(counts = pbmc.htos)
+pbmc.hashtag
+```
+
+```{r}
+pbmc.hashtag <- NormalizeData(pbmc.hashtag, 
+                             assay = "HTO", 
+                             normalization.method = "CLR")
+```
+
+```{r}
+pbmc.hashtag <- HTODemux(pbmc.hashtag,
+                        assay = "HTO", 
+                        positive.quantile = 0.99)
+```
+
+
+```{r}
+table(pbmc.hashtag$HTO_classification.global)
+```
+
+```{r}
+pbmc.hashtag@assays
+```
+
+```{r}
+table(pbmc.hashtag$hash.ID)
+```
+
+```{r}
+pbmc_hashtag <- Idents(pbmc.hashtag,id = "hash_maxID")
+pbmc_hashtag <-Idents(pbmc.hashtag,id = "hash_maxID")
+RidgePlot(pbmc.hashtag,features.plot = rownames(GetAssayData(pbmc.hashtag,assay.type = "HTO"))[1:2],nCol = 2)
+```
+```{r}
+P1 <- RidgePlot(object = pbmc.hashtag, features = rownames(GetAssayData(pbmc.hashtag, assay = "HTO"))[1:5])
+
+ggsave(filename = "gene expression0323.png", plot = P1, width = 20, height = 15,dpi = 300)
+
+P1
+```
+
+```{r}
+Idents(pbmc.hashtag) <- "HTO_classification.global"
+p2 <- VlnPlot(pbmc.hashtag, features = "nCount_RNA", pt.size = 0.1, log = TRUE)
+ggsave(filename = "gene expression0323_single.png", plot = p2,dpi = 300)
+p2
+```
+
+```{r, results = 'hold',collapse=TRUE}
+hot_counts <- Read10X(data0323.dir)
+pbmc.htos <- as.data.frame(hot_counts$`Hashtag`)
+rownames(pbmc.htos)
+pbmc.htos <- pbmc.htos[-c(1:5),]
+rownames(pbmc.htos)
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(pbmc.htos),colnames(adt_seurat)))
+length(commonDrops)
+Adt_seurat <- CreateSeuratObject(counts = rna_counts$`Antibody Capture`, project = "Anti")
+Adt_seurat <- Adt_seurat[,commonDrops]
+Adt_seurat[["HTO"]] <- CreateAssayObject(counts = pbmc.htos[,commonDrops])
+Adt_seurat
+head(Adt_seurat)
+```
+
+```{r,collapse = TRUE}
+pbmc.htos <- pbmc.htos[,commonDrops]
+Adt_seurat[["HTO"]] <- CreateAssayObject(counts = pbmc.htos)
+Adt_seurat
+head(Adt_seurat)
+```
+
+```{r,collapse = TRUE}
+Adt_seurat <- NormalizeData(Adt_seurat, 
+                             assay = "HTO", 
+                             normalization.method = "CLR")
+
+```
+
+```{r}
+Adt_seurat <- HTODemux(Adt_seurat,
+                        assay = "HTO", 
+                        positive.quantile = 0.99)
+```
+
+```{r}
+table(Adt_seurat$HTO_classification.global)
+```
+
+
+
+```{r}
+data0323.dir <- "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0428/032323"
+hot_counts <- Read10X(data0323.dir)
+pbmc.htos <- as.data.frame(hot_counts$`Hashtag`)
+rownames(pbmc.htos)
+pbmc.htos <- pbmc.htos[-c(1:5),]
+rownames(pbmc.htos)
+HTO_seurat <- CreateSeuratObject(counts = pbmc.htos,project = "HTO")
+Adt_seurat <- CreateSeuratObject(counts = hot_counts$`Antibody Capture`, project = "Anti")
+rna_seurat <- CreateSeuratObject(counts = hot_counts$`Gene Expression`, project = "RNA",min.cells = 3, min.features = 200)
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(HTO_seurat),colnames(Adt_seurat)))
+length(commonDrops)
+Adt_seurat 
+head(Adt_seurat)
+Adt_seurat <- Adt_seurat[,commonDrops]
+HTO_seurat <- HTO_seurat[,commonDrops]
+rna_seurat <- rna_seurat[,commonDrops]
+HTO_seurat[["ADT"]] <- CreateAssayObject(counts = GetAssayData(Adt_seurat, slot = "counts"))
+HTO_seurat[["RNA"]] <- CreateAssayObject(counts = GetAssayData(rna_seurat, slot = "counts"))
+HTO_seurat
+head(HTO_seurat)
+HTO_seurat[["ADT"]] <- CreateAssayObject(counts = Adt_seurat[,commonDrops])
+HTO_seurat[["RNA"]] <- CreateAssayObject(counts=rna_seurat[,commonDrops])
+
+
+```
+```{r}
+data0323.dir <- "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0428/032323"
+counts <- Read10X(data0323.dir)
+hto <- as.data.frame(counts$`Hashtag`)
+rownames(hto)
+hto <- hto[-c(1:5),]
+rownames(hto)
+HTO_seurat <- CreateSeuratObject(counts = hto,project = "HTO")
+Adt_seurat <- CreateSeuratObject(counts = counts$`Antibody Capture`, project = "Anti")
+rna_seurat <- CreateSeuratObject(counts = counts$`Gene Expression`, project = "RNA",min.cells = 3, min.features = 200)
+rna_seurat
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(HTO_seurat),colnames(Adt_seurat)))
+length(commonDrops)
+Adt_seurat 
+head(rna_seurat)
+Adt_seurat <- Adt_seurat[,commonDrops]
+HTO_seurat <- HTO_seurat[,commonDrops]
+rna_seurat <- rna_seurat[,commonDrops]
+rna_seurat[["ADT"]] <- Adt_seurat
+HTO_seurat[["RNA"]] <- CreateAssayObject(counts=rna_seurat[,commonDrops])
+rna_seurat[["ADT"]] <- CreateAssayObject(counts = GetAssayData(Adt_seurat, slot = "counts"))
+HTO_seurat[["RNA"]] <- CreateAssayObject(counts = GetAssayData(rna_seurat, slot = "counts"))
+rna_seurat
+head(rna_seurat)
+rna_seurat[["ADT"]] <- CreateAssayObject(counts = Adt_seurat[,commonDrops])
+HTO_seurat[["RNA"]] <- CreateAssayObject(counts=rna_seurat[,commonDrops])
+Assays(rna_seurat)
+```
+ 
+```{r}
+rna_seurat <- CreateSeuratObject(counts = counts$`Gene Expression`)
+
+rna_seurat[["ADT"]] <- CreateAssayObject(counts = counts$`Antibody Capture`)
+rna_seurat
+head(rna_seurat)
+DefaultAssay(rna_seurat) <- "ADT"
+DefaultAssay(rna_seurat)
+DefaultAssay(rna_seurat) <- "RNA"
+
+
+```
+
+```{r}
+hto <- as.data.frame(counts$`Hashtag`)
+rownames(hto)
+hto <- hto[-c(1:5),]
+rownames(hto)
+
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(hto)))
+
+length(commonDrops)
+
+rna_seurat <- rna_seurat[,commonDrops]
+hto <- hto[,commonDrops]
+
+rna_seurat <- subset(rna_seurat, subset = nFeature_RNA > 200)
+
+
+rna_seurat[["HTO"]] <- CreateAssayObject(counts = hto)
+```
+
+```{r}
+rna_seurat <- NormalizeData(rna_seurat, 
+                             assay = "HTO", 
+                             normalization.method = "CLR")
+```
+
+
+
+```{r}
+rna_seurat <- HTODemux(rna_seurat,
+                        assay = "HTO", 
+                        positive.quantile = 0.99)
+```
+
+```{r}
+table(rna_seurat$HTO_classification.global)
+```
+
+```{r}
+rna_seurat@assays
+```
+
+```{r}
+table(rna_seurat$hash.ID)
+```
+
+```{r}
+rna_seurat.subset <- subset(rna_seurat, 
+                             idents = c("Negative","Doublet"), 
+                             invert = TRUE)
+table(Idents(rna_seurat.subset)) 
+
+```
+
+```{r}
+IS_IEC_P6_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-6-Antibody"))
+IS_IEC_P8_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-7-Antibody"))
+IS_LP_P6_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-8-Antibody"))
+IS_LP_P8_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-9-Antibody"))
+CD4_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-10-Antibody"))
+```
+
+```{r}
+table(rna_seurat$nCount_RNA)
+```
+
+```{r}
+pbmc <- CreateSeuratObject(counts = counts, project = "pbmc3k", min.cells = 3, min.features = 200)
+colnames(counts)
+```
+
+
+```{r}
+data0323.dir <- "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0428/032323"
+counts <- Read10X(data0323.dir)
+hto <- as.data.frame(counts$`Hashtag`)
+rownames(hto)
+hto <- hto[-c(1:5),]
+rownames(hto)
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(hto)))
+length(commonDrops)
+
+rna_seurat <- rna_seurat[,commonDrops]
+hto <- hto[,commonDrops]
+
+rna_seurat <- subset(rna_seurat, subset = nFeature_RNA > 200)
+
+
+rna_seurat[["HTO"]] <- CreateAssayObject(counts = hto)
+
+
+```
+
+```{r}
+data0323.dir <- "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0428/032323"
+counts <- Read10X(data0323.dir)
+hto <- as.data.frame(counts$`Hashtag`)
+rownames(hto)
+hto <- hto[-c(1:5),]
+rownames(hto)
+```
+
+
+```{r}
+seurat <- CreateSeuratObject(counts = counts$`Gene Expression`)
+seurat[["ADT"]] <- CreateAssayObject(counts = counts$`Antibody Capture`)
+seurat
+head(seurat)
+
+```
+
+```{r}
+commonDrops <- Reduce("intersect",x=list(colnames(seurat),colnames(hto)))
+length(commonDrops)
+seurat <- subset(seurat, subset = nFeature_RNA > 100)
+seurat <- seurat[,commonDrops]
+hto <- hto[,commonDrops]
+
+```
+
+```{r}
+# Normalize RNA data with log normalization
+pbmc.hashtag <- NormalizeData(seurat)
+# Find and scale variable features
+pbmc.hashtag <- FindVariableFeatures(pbmc.hashtag, selection.method = "mean.var.plot")
+pbmc.hashtag <- ScaleData(pbmc.hashtag, features = VariableFeatures(pbmc.hashtag))
+```
+```{r}
+pbmc.hashtag[["HTO"]] <- CreateAssayObject(counts = hto)
+```
+
+```{r}
+rna_seurat <- NormalizeData(pbmc.hashtag , 
+                             assay = "HTO", 
+                             normalization.method = "CLR")
+```
+
+```{r}
+rna_seurat <- HTODemux(rna_seurat,
+                        assay = "HTO", 
+                        positive.quantile = 0.99)
+```
+
+
+```{r}
+seurat[["HTO"]] <- CreateAssayObject(counts = hto)
+
+```
+
+```{r}
+data0323.dir <- "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0428/032323"
+counts <- Read10X(data0323.dir)
+hto <- as.data.frame(counts$`Hashtag`)
+rownames(hto)
+hto <- hto[-c(1:5),]
+rownames(hto)
+
+rna_seurat <- CreateSeuratObject(counts = counts$`Gene Expression`)
+rna_seurat[["ADT"]] <- CreateAssayObject(counts = counts$`Antibody Capture`)
+rna_seurat
+head(rna_seurat)
+
+
+rna_seurat <- subset(rna_seurat, subset = nFeature_RNA > 200)
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(hto)))
+length(commonDrops)
+rna_seurat <- rna_seurat[,commonDrops]
+hto <- hto[,commonDrops]
+
+rna_seurat [["HTO"]] <- CreateAssayObject(counts = hto)
+
+rna_seurat <- NormalizeData(rna_seurat , 
+                             assay = "HTO", 
+                             normalization.method = "CLR")
+
+rna_seurat <- HTODemux(rna_seurat,
+                        assay = "HTO", 
+                        positive.quantile = 0.99)
+
+table(rna_seurat$HTO_classification.global)
+
+rna_seurat@assays
+
+table(rna_seurat$hash.ID)
+
+P1 <- RidgePlot(object = rna_seurat, features = rownames(GetAssayData(pbmc.hashtag, assay = "HTO"))[1:5])
+
+ggsave(filename = "gene expression0323.png", plot = P1, width = 20, height = 15,dpi = 300)
+
+P1
+
+Idents(rna_seurat) <- "HTO_classification.global"
+p2 <- VlnPlot(rna_seurat, features = "nCount_RNA", pt.size = 0.1, log = TRUE)
+ggsave(filename = "gene expression0323_single.png", plot = p2,dpi = 300)
+p2
+
+rna_seurat.subset <- subset(rna_seurat, 
+                             idents = c("Negative","Doublet"), 
+                             invert = TRUE)
+
+table(Idents(rna_seurat.
+             subset))
+table(rna_seurat.subset$hash.ID)
+
+Idents(rna_seurat.subset) <- "hash.ID"
+
+IS_IEC_P6_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-6-Antibody"))
+IS_IEC_P8_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-7-Antibody"))
+IS_LP_P6_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-8-Antibody"))
+IS_LP_P8_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-9-Antibody"))
+CD4_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-10-Antibody"))
+```
+
+```{r}
+BiocManager::install("MULTIseqDemux")
+library(MULTIseqDemux)
+```
+```{r}
+rna_seurat <- MULTIseqDemux(rna_seurat, assay = "HTO", known = NULL, method = "kmeans", dims = 1:10, cells.use = NULL, resolution = 0.5)
+```
+
+
+
+```{r}
+data_dirs <- c("/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0619/51023",             
+               "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0619/51723")
+for (dir in data_dirs) {
+  # read data
+  counts <- Read10X(dir)
+  
+  # rest of your processing steps...
+  hto <- as.data.frame(counts$`Hashtag`)
+  rownames(hto)
+hto <- hto[-c(1:5),]
+rownames(hto)
+
+rna_seurat <- CreateSeuratObject(counts = counts$`Gene Expression`)
+rna_seurat[["ADT"]] <- CreateAssayObject(counts = counts$`Antibody Capture`)
+rna_seurat
+head(rna_seurat)
+
+
+rna_seurat <- subset(rna_seurat, subset = nFeature_RNA > 300)
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(hto)))
+length(commonDrops)
+rna_seurat <- rna_seurat[,commonDrops]
+hto <- hto[,commonDrops]
+
+rna_seurat [["HTO"]] <- CreateAssayObject(counts = hto)
+
+rna_seurat <- NormalizeData(rna_seurat , 
+                             assay = "HTO", 
+                             normalization.method = "CLR")
+
+rna_seurat <- HTODemux(rna_seurat,
+                        assay = "HTO", 
+                        positive.quantile = 0.99)
+
+table(rna_seurat$HTO_classification.global)
+
+rna_seurat@assays
+
+table(rna_seurat$hash.ID)
+
+  # create RidgePlot and VlnPlot
+  P1 <- RidgePlot(object = rna_seurat, features = rownames(GetAssayData(rna_seurat, assay = "HTO"))[1:5])
+  Idents(rna_seurat) <- "HTO_classification.global"
+  p2 <- VlnPlot(rna_seurat, features = "nCount_RNA", pt.size = 0.1, log = TRUE)
+
+  # generate a unique name for each plot
+  dir_name <- gsub("/", "_", dir)
+  ridgeplot_name <- paste0("RidgePlot_", dir_name, ".png")
+  vlnplot_name <- paste0("VlnPlot_", dir_name, ".png")
+
+  # save plots to disk
+  ggsave(filename = ridgeplot_name, plot = P1, width = 20, height = 15, dpi = 300)
+  ggsave(filename = vlnplot_name, plot = p2, dpi = 300)
+  
+  # subset Seurat objects for each unique hash.ID
+  hash_IDs <- unique(Idents(rna_seurat.subset))
+  for (hash_ID in hash_IDs) {
+    subset_obj <- subset(rna_seurat.subset, idents = c(hash_ID))
+    
+    # generate a unique name for each subset
+    subset_name <- paste0(dir_name, "_", hash_ID, ".rds")
+    
+    # save subset to disk
+    saveRDS(subset_obj, file = subset_name)
+  }
+}
+```
+
+```{r}
+IS_IEC_P6_03_15 <- readRDS("_Users_chaotingzhou_Documents_Cadwell-lab_Single_Cells_HR_0428_032323_anti-human-Hashtag-6-Antibody.rds")
+```
+
+```{r}
+data_dirs <- c(
+                    
+               
+            
+              
+               "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0113/12-20-22"
+               )
+for (dir in data_dirs) {
+  # read data
+  counts <- Read10X(dir)
+  
+  # rest of your processing steps...
+  hto <- as.data.frame(counts$`Hashtag`)
+  rownames(hto)
+hto <- hto[-c(1:5),]
+rownames(hto)
+
+rna_seurat <- CreateSeuratObject(counts = counts$`Gene Expression`)
+rna_seurat[["ADT"]] <- CreateAssayObject(counts = counts$`Antibody Capture`)
+rna_seurat
+head(rna_seurat)
+
+
+rna_seurat <- subset(rna_seurat, subset = nFeature_RNA > 200)
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(hto)))
+length(commonDrops)
+rna_seurat <- rna_seurat[,commonDrops]
+hto <- hto[,commonDrops]
+
+rna_seurat [["HTO"]] <- CreateAssayObject(counts = hto)
+
+rna_seurat <- NormalizeData(rna_seurat , 
+                             assay = "HTO", 
+                             normalization.method = "CLR")
+
+rna_seurat <- HTODemux(rna_seurat,
+                        assay = "HTO", 
+                        positive.quantile = 0.99)
+
+table(rna_seurat$HTO_classification.global)
+
+rna_seurat@assays
+
+table(rna_seurat$hash.ID)
+
+  # create RidgePlot and VlnPlot
+  P1 <- RidgePlot(object = rna_seurat, features = rownames(GetAssayData(rna_seurat, assay = "HTO"))[1:5])
+  Idents(rna_seurat) <- "HTO_classification.global"
+  p2 <- VlnPlot(rna_seurat, features = "nCount_RNA", pt.size = 0.1, log = TRUE)
+
+  # generate a unique name for each plot
+  dir_name <- gsub("/", "_", dir)
+  ridgeplot_name <- paste0("RidgePlot_", dir_name, ".png")
+  vlnplot_name <- paste0("VlnPlot_", dir_name, ".png")
+
+  # save plots to disk
+  ggsave(filename = ridgeplot_name, plot = P1, width = 20, height = 15, dpi = 300)
+  ggsave(filename = vlnplot_name, plot = p2, dpi = 300)
+  
+  rna_seurat.subset <- subset(rna_seurat, 
+                             idents = c("Negative","Doublet"), 
+                             invert = TRUE)
+  table(Idents(rna_seurat.subset))
+  table(rna_seurat.subset$hash.ID)
+  Idents(rna_seurat.subset) <- "hash.ID"
+  
+  # subset Seurat objects for each unique hash.ID
+  hash_IDs <- unique(Idents(rna_seurat.subset))
+  for (hash_ID in hash_IDs) {
+    subset_obj <- subset(rna_seurat.subset, idents = c(hash_ID))
+    
+    # generate a unique name for each subset
+    subset_name <- paste0(dir_name, "_", hash_ID, ".rds")
+    
+    # save subset to disk
+    saveRDS(subset_obj, file = subset_name)
+  }
+}
+```
+
+```{r}
+data0323.dir <- "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0428/patient_12_13"
+counts <- Read10X(data0323.dir)
+hto <- as.data.frame(counts$`Hashtag`)
+rownames(hto)
+hto <- hto[-c(1:5),]
+rownames(hto)
+
+rna_seurat <- CreateSeuratObject(counts = counts$`Gene Expression`)
+rna_seurat[["ADT"]] <- CreateAssayObject(counts = counts$`Antibody Capture`)
+rna_seurat
+head(rna_seurat)
+
+
+rna_seurat <- subset(rna_seurat, subset = nFeature_RNA > 200)
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(hto)))
+length(commonDrops)
+rna_seurat <- rna_seurat[,commonDrops]
+hto <- hto[,commonDrops]
+
+rna_seurat [["HTO"]] <- CreateAssayObject(counts = hto)
+
+rna_seurat <- NormalizeData(rna_seurat , 
+                             assay = "HTO", 
+                             normalization.method = "CLR")
+
+rna_seurat <- HTODemux(rna_seurat,
+                        assay = "HTO", 
+                        positive.quantile = 0.99)
+
+table(rna_seurat$HTO_classification.global)
+
+rna_seurat@assays
+
+table(rna_seurat$hash.ID)
+
+P1 <- RidgePlot(object = rna_seurat, features = rownames(GetAssayData(pbmc.hashtag, assay = "HTO"))[1:5])
+
+ggsave(filename = "gene expression0323.png", plot = P1, width = 20, height = 15,dpi = 300)
+
+P1
+
+Idents(rna_seurat) <- "HTO_classification.global"
+p2 <- VlnPlot(rna_seurat, features = "nCount_RNA", pt.size = 0.1, log = TRUE)
+ggsave(filename = "gene expression0323_single.png", plot = p2,dpi = 300)
+p2
+
+rna_seurat.subset <- subset(rna_seurat, 
+                             idents = c("Negative","Doublet"), 
+                             invert = TRUE)
+
+table(Idents(rna_seurat.
+             subset))
+table(rna_seurat.subset$hash.ID)
+
+Idents(rna_seurat.subset) <- "hash.ID"
+
+
+```
+
+
+```{r}
+IS_IEC_P6_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-6-Antibody"))
+IS_IEC_P8_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-7-Antibody"))
+IS_LP_P6_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-8-Antibody"))
+IS_LP_P8_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-9-Antibody"))
+CD4_03_15 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-10-Antibody"))
+```
+
+
+```{r}
+data_dirs <- c( "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0113/12-01-22")
+for (dir in data_dirs) {
+  # read data
+  counts <- Read10X(dir)
+  
+  # rest of your processing steps...
+  hto <- as.data.frame(counts$`Hashtag`)
+  rownames(hto)
+hto <- hto[-c(1:5),]
+rownames(hto)
+
+rna_seurat <- CreateSeuratObject(counts = counts$`Gene Expression`)
+rna_seurat[["ADT"]] <- CreateAssayObject(counts = counts$`Antibody Capture`)
+rna_seurat
+head(rna_seurat)
+
+
+rna_seurat <- subset(rna_seurat, subset = nFeature_RNA > 200)
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(hto)))
+length(commonDrops)
+rna_seurat <- rna_seurat[,commonDrops]
+hto <- hto[,commonDrops]
+
+rna_seurat [["HTO"]] <- CreateAssayObject(counts = hto)
+
+rna_seurat <- NormalizeData(rna_seurat , 
+                             assay = "HTO", 
+                             normalization.method = "CLR")
+
+rna_seurat <- HTODemux(rna_seurat,
+                        assay = "HTO", 
+                        positive.quantile = 0.99)
+
+table(rna_seurat$HTO_classification.global)
+
+rna_seurat@assays
+
+table(rna_seurat$hash.ID)
+
+  # create RidgePlot and VlnPlot
+  P1 <- RidgePlot(object = rna_seurat, features = rownames(GetAssayData(rna_seurat, assay = "HTO"))[1:5])
+  Idents(rna_seurat) <- "HTO_classification.global"
+  p2 <- VlnPlot(rna_seurat, features = "nCount_RNA", pt.size = 0.1, log = TRUE)
+
+  # generate a unique name for each plot
+  dir_name <- gsub("/", "_", dir)
+  ridgeplot_name <- paste0("RidgePlot_", dir_name, ".png")
+  vlnplot_name <- paste0("VlnPlot_", dir_name, ".png")
+
+  # save plots to disk
+  ggsave(filename = ridgeplot_name, plot = P1, width = 20, height = 15, dpi = 300)
+  ggsave(filename = vlnplot_name, plot = p2, dpi = 300)
+  
+  rna_seurat.subset <- subset(rna_seurat, 
+                             idents = c("Negative","Doublet"), 
+                             invert = TRUE)
+  table(Idents(rna_seurat.subset))
+  table(rna_seurat.subset$hash.ID)
+  Idents(rna_seurat.subset) <- "hash.ID"
+  
+  # subset Seurat objects for each unique hash.ID
+  hash_IDs <- unique(Idents(rna_seurat.subset))
+  for (hash_ID in hash_IDs) {
+    subset_obj <- subset(rna_seurat.subset, idents = c(hash_ID))
+    
+    # generate a unique name for each subset
+    subset_name <- paste0(dir_name, "_", hash_ID, ".rds")
+    
+    # save subset to disk
+    saveRDS(subset_obj, file = subset_name)
+  }
+}
+
+
+```
+```{r}
+library(Matrix)
+
+# Define file paths
+matrix_file <- "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0113/12-01-22/matrix.mtx"
+barcodes_file <- "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0407/0315/barcodes.tsv.gz"
+features_file <- "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0113/12-01-22/features.tsv"
+```
+
+```{r}
+matrix <- readMM(file = matrix_file)
+barcodes <- read.table(barcodes_file)
+features <- read.table(features_file)
+```
+
+
+```{r}
+dim(matrix)
+dim(barcodes)
+dim(features)
+```
+
+```{r}
+pbmc.counts <- Read10X(data.dir = "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0113/12-01-22")
+```
+
+```{r}
+counts <- Read10X(data.dir = "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0113/12-01-22")
+  
+  # rest of your processing steps...
+  hto <- as.data.frame(counts$`Antibody Capture`)
+  rownames(hto)
+
+rna_seurat <- CreateSeuratObject(counts = counts$`Gene Expression`)
+rna_seurat[["ADT"]] <- CreateAssayObject(counts = counts$`Antibody Capture`)
+rna_seurat
+head(rna_seurat)
+
+
+rna_seurat <- subset(rna_seurat, subset = nFeature_RNA > 200)
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(hto)))
+length(commonDrops)
+rna_seurat <- rna_seurat[,commonDrops]
+hto <- hto[,commonDrops]
+
+rna_seurat [["HTO"]] <- CreateAssayObject(counts = hto)
+
+rna_seurat <- NormalizeData(rna_seurat , 
+                             assay = "HTO", 
+                             normalization.method = "CLR")
+
+rna_seurat <- HTODemux(rna_seurat,
+                        assay = "HTO", 
+                        positive.quantile = 0.99)
+
+table(rna_seurat$HTO_classification.global)
+
+rna_seurat@assays
+
+table(rna_seurat$hash.ID)
+```
+
+```{r}
+  P1 <- RidgePlot(object = rna_seurat, features = rownames(GetAssayData(rna_seurat, assay = "HTO"))[1:5])
+  Idents(rna_seurat) <- "HTO_classification.global"
+  p2 <- VlnPlot(rna_seurat, features = "nCount_RNA", pt.size = 0.1, log = TRUE)
+
+  # save plots to disk
+  ggsave(filename = "1201.png", plot = P1, width = 20, height = 15, dpi = 300)
+  ggsave(filename = "vlnplot_1201.png", plot = p2, dpi = 300)
+```
+
+```{r}
+rna_seurat.subset <- subset(rna_seurat, 
+                             idents = c("Negative","Doublet"), 
+                             invert = TRUE)
+  table(Idents(rna_seurat.subset))
+  table(rna_seurat.subset$hash.ID)
+  Idents(rna_seurat.subset) <- "hash.ID"
+```
+
+```{r}
+subset_obj <- subset(rna_seurat.subset, idents = c(hash_ID))
+    
+    # generate a unique name for each subset
+    subset_name <- paste0(dir_name, "_", hash_ID, ".rds")
+    
+    # save subset to disk
+    saveRDS(subset_obj, file = subset_name)
+```
+
+
+```{r}
+IS_IEC_P6_12_01_IEC_P15 <- subset(rna_seurat.subset ,
+               idents = c("HT6"))
+IS_IEC_P7_12_01_LP_P15 <- subset(rna_seurat.subset ,
+               idents = c("HT7"))
+IS_LP_P8__12_01_IEC_P19 <- subset(rna_seurat.subset ,
+               idents = c("HT8"))
+IS_LP_P9__12_01_LP_P19 <- subset(rna_seurat.subset ,
+               idents = c("HT9"))
+CD4__12_01 <- subset(rna_seurat.subset ,
+               idents = c("HT10"))
+```
+
+```{r}
+saveRDS(IS_IEC_P6_12_01_IEC_P15, file = "IS_IEC_P6_12_01_IEC_P15.rds")
+saveRDS(IS_IEC_P7_12_01_LP_P15, file = "IS_IEC_P7_12_01_LP_P15.rds")
+saveRDS(IS_LP_P8__12_01_IEC_P19, file = "IS_LP_P8__12_01_IEC_P19.rds")
+saveRDS(IS_LP_P9__12_01_LP_P19, file = "IS_LP_P9__12_01_LP_P19.rds")
+saveRDS(CD4__12_01, file = "CD4__12_01.rds")
+```
+
+
+```{r}
+data0323.dir <- "/Users/chaotingzhou/Documents/Cadwell-lab/Single_Cells_HR/0619/51723"
+counts <- Read10X(data0323.dir)
+hto <- as.data.frame(counts$`Hashtag`)
+rownames(hto)
+hto <- hto[-c(1:6),]
+rownames(hto)
+
+rna_seurat <- CreateSeuratObject(counts = counts$`Gene Expression`)
+rna_seurat[["ADT"]] <- CreateAssayObject(counts = counts$`Antibody Capture`)
+rna_seurat
+head(rna_seurat)
+
+
+rna_seurat <- subset(rna_seurat, subset = nFeature_RNA > 200)
+commonDrops <- Reduce("intersect",x=list(colnames(rna_seurat),colnames(hto)))
+length(commonDrops)
+rna_seurat <- rna_seurat[,commonDrops]
+hto <- hto[,commonDrops]
+
+rna_seurat [["HTO"]] <- CreateAssayObject(counts = hto)
+
+rna_seurat <- NormalizeData(rna_seurat , 
+                             assay = "HTO", 
+                             normalization.method = "CLR")
+
+rna_seurat_1 <- MULTIseqDemux(object = rna_seurat, assay = "HTO")
+
+rna_seurat_D <- HTODemux(rna_seurat,
+                        assay = "HTO", 
+                        positive.quantile = 0.99)
+
+table(rna_seurat_D$HTO_classification.global)
+
+rna_seurat@assays
+
+table(rna_seurat_D$hash.ID)
+
+P1 <- RidgePlot(object = rna_seurat_D, features = rownames(GetAssayData(rna_seurat_D, assay = "HTO"))[1:5])
+P1
+
+ggsave(filename = "MAY17.png", plot = P1, width = 20, height = 15,dpi = 300)
+
+P1
+
+Idents( rna_seurat_D) <- "HTO_classification.global"
+p2 <- VlnPlot(rna_seurat_D, features = "nCount_RNA", pt.size = 0.1, log = TRUE)
+p2
+ggsave(filename = "MAY17_single.png", plot = p2,dpi = 300)
+p2
+
+rna_seurat.subset <- subset(rna_seurat_D, 
+                             idents = c("Negative","Doublet"), 
+                             invert = TRUE)
+
+table(Idents(rna_seurat.
+             subset))
+table(rna_seurat.subset$hash.ID)
+
+Idents(rna_seurat.subset) <- "hash.ID"
+```
+
+```{r}
+P1 <- RidgePlot(object = rna_seurat, features = rownames(GetAssayData(rna_seurat, assay = "HTO"))[1:5])
+  Idents(rna_seurat) <- "HTO_classification.global"
+  p2 <- VlnPlot(rna_seurat, features = "nCount_RNA", pt.size = 0.1, log = TRUE)
+
+  # save plots to disk
+  ggsave(filename = "1220.png", plot = P1, width = 20, height = 15, dpi = 300)
+  ggsave(filename = "vlnplot_1220.png", plot = p2, dpi = 300)
+```
+
+```{r}
+rna_seurat.subset <- subset(rna_seurat, 
+                             idents = c("Negative","Doublet"), 
+                             invert = TRUE)
+  table(Idents(rna_seurat.subset))
+  table(rna_seurat.subset$hash.ID)
+  Idents(rna_seurat.subset) <- "hash.ID"
+```
+
+```{r}
+IEC_HT6_12_20_IEC_P3 <- subset(rna_seurat.subset ,
+               idents = c("HT6"))
+IEC_HT7_12_20_LP_P4 <- subset(rna_seurat.subset ,
+               idents = c("HT7"))
+LP_HT8__12_20_IEC_P3 <- subset(rna_seurat.subset ,
+               idents = c("HT8"))
+LP_HT9__12_20_LP_P4 <- subset(rna_seurat.subset ,
+               idents = c("HT9"))
+CD4__12_20 <- subset(rna_seurat.subset ,
+               idents = c("HT10"))
+```
+
+
+```{r}
+IEC_HT7_05_17_IEC_P5 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-7-Antibody"))
+IEC_HT8_05_17_LP_P5 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-8-Antibody"))
+LP_HT9_05_17_LP19_all <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-9-Antibody"))
+LP_HT9__12_20_LP_P4 <- subset(rna_seurat.subset ,
+               idents = c("HT9"))
+CD4__MAY_17 <- subset(rna_seurat.subset ,
+               idents = c("anti-human-Hashtag-10-Antibody"))
+```
+
+
+
+```{r}
+saveRDS(IEC_HT7_05_17_IEC_P5, file = "IEC_HT7_05_17_IEC_P5.rds")
+saveRDS(IEC_HT8_05_17_LP_P5, file = "IEC_HT8_05_17_LP_P5 .rds")
+saveRDS(LP_HT9_05_17_LP19_all, file = "LP_HT9_05_17_LP19_all.rds")
+saveRDS(CD4__MAY_17 , file = "CD4__MAY_17.rds")
+saveRDS(CD4__12_20, file = "CD4__12_20.rds")
+```
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
